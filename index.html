@@ -167,8 +167,8 @@
     </div>
 
     <div id="syncTab" class="panel">
-      <label>Gemini API Key (Optional — stored only in this browser)</label>
-      <input id="apiKeyInput" type="password" placeholder="Paste Gemini API key for live AI replies" />
+      <label>Gemini API Key (Stored only in this browser)</label>
+      <input id="apiKeyInput" type="text" autocomplete="off" placeholder="Paste Gemini API key (starts with AIza...)" />
       <label>Core Memory & Current Priorities (Saved in JSON backups)</label>
       <textarea id="memoryInput" rows="4" placeholder="Name, goals, habits, current focus..."></textarea>
       <div class="row">
@@ -207,7 +207,7 @@ Keep replies clear, natural, and conversational in English or Tanglish.`;
           state = { ...state, ...parsed };
         }
       } catch (e) {}
-      document.getElementById("apiKeyInput").value = state.apiKey || "";
+      document.getElementById("apiKeyInput").value = (state.apiKey || "").trim();
       document.getElementById("memoryInput").value = state.memory || "";
       renderChat();
     }
@@ -234,7 +234,7 @@ Keep replies clear, natural, and conversational in English or Tanglish.`;
       box.scrollTop = box.scrollHeight;
     }
 
-    let speakEnabled = true;
+    let speakEnabled = false;
     let autoLoop = false;
     let recognition = null;
 
@@ -255,6 +255,40 @@ Keep replies clear, natural, and conversational in English or Tanglish.`;
       window.speechSynthesis.speak(utter);
     }
 
+    async function callGemini(promptText) {
+      const key = (document.getElementById("apiKeyInput").value || state.apiKey || "").trim();
+      if (!key) {
+        return { ok: false, error: "API key is empty. Go to Memory & Key tab, paste your key, and tap Save Locally." };
+      }
+      state.apiKey = key;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+
+      const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
+      let lastErr = "Unknown API error";
+
+      for (const model of models) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ parts: [{ text: promptText }] }] })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) return { ok: true, text };
+            lastErr = "Empty response from Gemini model.";
+          } else {
+            lastErr = data?.error?.message || `HTTP ${res.status}`;
+          }
+        } catch (err) {
+          lastErr = err?.message || "Network error";
+        }
+      }
+      return { ok: false, error: lastErr };
+    }
+
     async function askShasa(userText) {
       if (!userText.trim()) return;
       state.history.push({ role: "user", text: userText });
@@ -262,35 +296,27 @@ Keep replies clear, natural, and conversational in English or Tanglish.`;
       persistState();
       setStatus("Thinking...");
 
-      let reply = "";
-      if (state.apiKey) {
-        try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`;
-          const promptPayload = `${SHASA_PROMPT}\n\nSaved Memory: ${state.memory}\n\nUser says: ${userText}`;
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ parts: [{ text: promptPayload }] }] })
-          });
-          const data = await res.json();
-          reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        } catch (err) {
-          reply = "";
-        }
-      }
+      const promptPayload = `${SHASA_PROMPT}\n\nSaved Memory: ${state.memory}\n\nUser says: ${userText}`;
+      const result = await callGemini(promptPayload);
 
-      if (!reply) {
-        reply = `Boss, naan kavanichitten: "${userText}". Live AI key connect panniruntha full dynamic reply varum; ippo local mode-la solren—first un next 1 clear action fix pannuvom, apram water/rest-aiyum marakkathinga. Shall we break this down step by step?`;
-      }
+      const reply = result.ok
+        ? result.text
+        : `Boss, live AI call failed: ${result.error}\n\nCheck Memory & Key tab -> Save Locally, and make sure your AI Studio API key is valid and active.`;
 
       state.history.push({ role: "shasa", text: reply });
       renderChat();
       persistState();
-      setStatus("Speaking...");
-      speakText(reply, () => {
-        setStatus(autoLoop ? "Listening..." : "Ready");
-        if (autoLoop) startListening();
-      });
+      setStatus(result.ok ? "Live AI" : "Key/API Check");
+
+      if (speakEnabled) {
+        speakText(reply, () => {
+          setStatus(autoLoop ? "Listening..." : "Ready");
+          if (autoLoop) startListening();
+        });
+      } else if (autoLoop) {
+        setStatus("Listening...");
+        startListening();
+      }
     }
 
     function startListening() {
@@ -358,28 +384,16 @@ Keep replies clear, natural, and conversational in English or Tanglish.`;
       const tone = document.getElementById("toneSelect").value;
       if (!ctx) return;
       const out = document.getElementById("coachOutput");
-      if (state.apiKey) {
-        out.textContent = "Analyzing mood and drafting options...";
-        try {
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`;
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: `${SHASA_PROMPT}\n\nAnalyze this chat/situation and give 2-3 reply options in a ${tone} tone plus one brief honest tip:\n${ctx}` }] }]
-            })
-          });
-          const data = await res.json();
-          out.textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Could not generate response.";
-          return;
-        } catch (e) {}
-      }
-      out.textContent = `Tone: ${tone}\n1. Calm & clear: "I hear where you're coming from. Let's look at the practical facts first so both of us are on the same page."\n2. Warm & honest: "I care about how this goes, so I want to be upfront without making things tense."\nTip: Pause before sending and check whether your goal is clarity, comfort, or a firm boundary.`;
+      out.textContent = "Analyzing mood and drafting options...";
+      const res = await callGemini(`${SHASA_PROMPT}\n\nAnalyze this chat/situation and give 2-3 reply options in a ${tone} tone plus one brief honest tip:\n${ctx}`);
+      out.textContent = res.ok
+        ? res.text
+        : `Could not reach live AI (${res.error}). Check your API key in Memory & Key tab and tap Save Locally.`;
     });
 
     document.getElementById("saveStateBtn").addEventListener("click", () => {
       persistState();
-      setStatus("Saved");
+      setStatus(state.apiKey ? "Key Saved" : "Saved");
     });
 
     document.getElementById("exportBtn").addEventListener("click", () => {
