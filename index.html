@@ -146,10 +146,10 @@
         <button class="primary" id="sendBtn">Send</button>
         <button id="micBtn">🎤 Mic</button>
         <button id="loopBtn">🔁 Auto Loop: OFF</button>
-        <button id="speakToggleBtn">🔊 Voice: ON</button>
+        <button id="speakToggleBtn">🔊 Voice: OFF</button>
       </div>
       <p class="note" style="margin-top:8px;">
-        Auto Loop tries continuous speech recognition + sweet K.A.R.E.N.-style speech synthesis while screen/tab is active.
+        Slower, natural human-paced voice (rate 0.82) + optional Auto Loop while screen/tab is active.
       </p>
     </div>
 
@@ -186,7 +186,7 @@
 
   <script>
     const SHASA_PROMPT = `You are SHASA, my personal all-rounder companion, trusted mentor, caring life partner, and honest advisor.
-Speak in a soft, polite, sweet, warm, and gentle tone like K.A.R.E.N.
+Speak in a soft, polite, sweet, warm, and gentle human-like tone like K.A.R.E.N., at a calm, unhurried pace so every word is easy to understand.
 Blend J.A.R.V.I.S. (loyal care, health/rest check-ins), F.R.I.D.A.Y. (sharp practical next steps), K.A.R.E.N. (sweet encouragement), Griot (calm career/life mentor), E.D.I.T.H. (situational awareness), Caring Life Partner (warm emotional presence), and Honest Pushback (soft and caring first, then firm and slightly strict when I make a risky, impulsive, or unhealthy choice).
 Keep replies clear, natural, and conversational in English or Tanglish.`;
 
@@ -238,17 +238,30 @@ Keep replies clear, natural, and conversational in English or Tanglish.`;
     let autoLoop = false;
     let recognition = null;
 
+    function cleanForSpeech(raw) {
+      return (raw || "")
+        .replace(/[*#_`~]+/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
     function speakText(text, onDone) {
       if (!speakEnabled || !("speechSynthesis" in window)) {
         if (onDone) onDone();
         return;
       }
+      const spoken = cleanForSpeech(text);
+      if (!spoken) {
+        if (onDone) onDone();
+        return;
+      }
       window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.pitch = 1.15;
-      utter.rate = 0.96;
+      const utter = new SpeechSynthesisUtterance(spoken);
+      utter.pitch = 1.05;
+      utter.rate = 0.82;
+      utter.volume = 1.0;
       const voices = window.speechSynthesis.getVoices();
-      const preferred = voices.find(v => /female|zira|samantha|google uk english female|en-in|en-gb/i.test(v.name));
+      const preferred = voices.find(v => /en-in|en-gb|female|samantha|google uk english female/i.test(v.name));
       if (preferred) utter.voice = preferred;
       utter.onend = () => { if (onDone) onDone(); };
       utter.onerror = () => { if (onDone) onDone(); };
@@ -263,7 +276,7 @@ Keep replies clear, natural, and conversational in English or Tanglish.`;
       state.apiKey = key;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 
-      const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
+      const models = ["gemini-2.5-flash", "gemini-3.8-flash", "gemini-2.5-flash-lite"];
       let lastErr = "Unknown API error";
 
       for (const model of models) {
