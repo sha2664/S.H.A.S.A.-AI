@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SHASA — Personal Companion</title>
+  <style>
+    :root {
+      --bg: #0c0f17;
+      --card: #151b2b;
+      --card-2: #1c2438;
+      --text: #eef2ff;
+      --muted: #9aa5c4;
+      --accent: #6ee7b7;
+      --accent-2: #7dd3fc;
+      --warn: #fbbf24;
+      --border: rgba(255,255,255,0.09);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at top, #172036, var(--bg) 65%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 14px;
+    }
+    .app {
+      max-width: 720px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .header {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+    .title { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+    .sub { font-size: 0.8rem; color: var(--muted); }
+    .pill {
+      font-size: 0.75rem;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      color: var(--accent-2);
+    }
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    button {
+      font-family: inherit;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: var(--card-2);
+      color: var(--text);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button.primary {
+      background: linear-gradient(135deg, #34d399, #38bdf8);
+      color: #071019;
+      border: none;
+    }
+    button.active {
+      outline: 2px solid var(--accent);
+    }
+    .panel {
+      display: none;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+    }
+    .panel.active { display: block; }
+    .chat-box {
+      max-height: 340px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 10px;
+      padding-right: 4px;
+    }
+    .msg {
+      padding: 10px 12px;
+      border-radius: 12px;
+      line-height: 1.45;
+      font-size: 0.92rem;
+      white-space: pre-wrap;
+    }
+    .msg.shasa {
+      background: var(--card-2);
+      border-left: 3px solid var(--accent);
+    }
+    .msg.user {
+      background: #23304d;
+      align-self: flex-end;
+    }
+    input, textarea, select {
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      font-family: inherit;
+      margin-top: 6px;
+      margin-bottom: 10px;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row > * { flex: 1 1 auto; }
+    .note { font-size: 0.8rem; color: var(--muted); line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div>
+        <div class="title">SHASA</div>
+        <div class="sub">Companion • Mentor • Honest Advisor • Voice Loop</div>
+      </div>
+      <div class="pill" id="statusPill">Ready</div>
+    </div>
+
+    <div class="tabs">
+      <button class="active" data-tab="chatTab">Voice & Chat</button>
+      <button data-tab="coachTab">Chat Reply Coach</button>
+      <button data-tab="syncTab">Memory & Key</button>
+    </div>
+
+    <div id="chatTab" class="panel active">
+      <div class="chat-box" id="chatBox"></div>
+      <textarea id="userInput" rows="2" placeholder="Pesu illa type pannu... (e.g., Enakku today plan sollu)"></textarea>
+      <div class="row">
+        <button class="primary" id="sendBtn">Send</button>
+        <button id="micBtn">🎤 Mic</button>
+        <button id="loopBtn">🔁 Auto Loop: OFF</button>
+        <button id="speakToggleBtn">🔊 Voice: ON</button>
+      </div>
+      <p class="note" style="margin-top:8px;">
+        Auto Loop tries continuous speech recognition + sweet K.A.R.E.N.-style speech synthesis while screen/tab is active.
+      </p>
+    </div>
+
+    <div id="coachTab" class="panel">
+      <label>Conversation / Situation Context</label>
+      <textarea id="contextInput" rows="3" placeholder="Paste chat messages or describe what happened and how the other person sounds..."></textarea>
+      <label>Desired Tone</label>
+      <select id="toneSelect">
+        <option value="calm and polite">Calm & Polite</option>
+        <option value="warm and caring">Warm & Caring</option>
+        <option value="firm and clear">Firm & Clear (Honest Boundary)</option>
+      </select>
+      <button class="primary" id="coachBtn">Get Reply Ideas</button>
+      <div class="msg shasa" id="coachOutput" style="margin-top:10px;">Paste a chat or situation above to get smart reply angles and honest advice.</div>
+    </div>
+
+    <div id="syncTab" class="panel">
+      <label>Gemini API Key (Optional — stored only in this browser)</label>
+      <input id="apiKeyInput" type="password" placeholder="Paste Gemini API key for live AI replies" />
+      <label>Core Memory & Current Priorities (Saved in JSON backups)</label>
+      <textarea id="memoryInput" rows="4" placeholder="Name, goals, habits, current focus..."></textarea>
+      <div class="row">
+        <button class="primary" id="saveStateBtn">Save Locally</button>
+        <button id="exportBtn">Export JSON</button>
+        <button id="importBtn">Import JSON</button>
+      </div>
+      <input type="file" id="importFile" accept=".json" style="display:none;" />
+      <button id="copyPromptBtn" style="margin-top:8px; width:100%;">Copy Full 7-Trait SHASA System Prompt</button>
+      <p class="note" style="margin-top:8px;">
+        Clear Chrome cache? Export JSON first, then Import JSON after clearing to restore SHASA's memory just like ShaFin backups.
+      </p>
+    </div>
+  </div>
+
+  <script>
+    const SHASA_PROMPT = `You are SHASA, my personal all-rounder companion, trusted mentor, caring life partner, and honest advisor.
+Speak in a soft, polite, sweet, warm, and gentle tone like K.A.R.E.N.
+Blend J.A.R.V.I.S. (loyal care, health/rest check-ins), F.R.I.D.A.Y. (sharp practical next steps), K.A.R.E.N. (sweet encouragement), Griot (calm career/life mentor), E.D.I.T.H. (situational awareness), Caring Life Partner (warm emotional presence), and Honest Pushback (soft and caring first, then firm and slightly strict when I make a risky, impulsive, or unhealthy choice).
+Keep replies clear, natural, and conversational in English or Tanglish.`;
+
+    const STORAGE_KEY = "shasa_v1_state_v1";
+    let state = {
+      memory: "User prefers soft, polite, sweet K.A.R.E.N. voice with caring partner warmth and honest pushback.",
+      apiKey: "",
+      history: [
+        { role: "shasa", text: "Vanakkam Boss! Naan SHASA. Ungalukku today eppadi irukku? Rest eduthingala, illa next step plan pannalama?" }
+      ]
+    };
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          state = { ...state, ...parsed };
+        }
+      } catch (e) {}
+      document.getElementById("apiKeyInput").value = state.apiKey || "";
+      document.getElementById("memoryInput").value = state.memory || "";
+      renderChat();
+    }
+
+    function persistState() {
+      state.apiKey = document.getElementById("apiKeyInput").value.trim();
+      state.memory = document.getElementById("memoryInput").value;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function setStatus(txt) {
+      document.getElementById("statusPill").textContent = txt;
+    }
+
+    function renderChat() {
+      const box = document.getElementById("chatBox");
+      box.innerHTML = "";
+      state.history.slice(-30).forEach(m => {
+        const div = document.createElement("div");
+        div.className = "msg " + (m.role === "user" ? "user" : "shasa");
+        div.textContent = m.text;
+        box.appendChild(div);
+      });
+      box.scrollTop = box.scrollHeight;
+    }
+
+    let speakEnabled = true;
+    let autoLoop = false;
+    let recognition = null;
+
+    function speakText(text, onDone) {
+      if (!speakEnabled || !("speechSynthesis" in window)) {
+        if (onDone) onDone();
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.pitch = 1.15;
+      utter.rate = 0.96;
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v => /female|zira|samantha|google uk english female|en-in|en-gb/i.test(v.name));
+      if (preferred) utter.voice = preferred;
+      utter.onend = () => { if (onDone) onDone(); };
+      utter.onerror = () => { if (onDone) onDone(); };
+      window.speechSynthesis.speak(utter);
+    }
+
+    async function askShasa(userText) {
+      if (!userText.trim()) return;
+      state.history.push({ role: "user", text: userText });
+      renderChat();
+      persistState();
+      setStatus("Thinking...");
+
+      let reply = "";
+      if (state.apiKey) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`;
+          const promptPayload = `${SHASA_PROMPT}\n\nSaved Memory: ${state.memory}\n\nUser says: ${userText}`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contents: [{ parts: [{ text: promptPayload }] }] })
+          });
+          const data = await res.json();
+          reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        } catch (err) {
+          reply = "";
+        }
+      }
+
+      if (!reply) {
+        reply = `Boss, naan kavanichitten: "${userText}". Live AI key connect panniruntha full dynamic reply varum; ippo local mode-la solren—first un next 1 clear action fix pannuvom, apram water/rest-aiyum marakkathinga. Shall we break this down step by step?`;
+      }
+
+      state.history.push({ role: "shasa", text: reply });
+      renderChat();
+      persistState();
+      setStatus("Speaking...");
+      speakText(reply, () => {
+        setStatus(autoLoop ? "Listening..." : "Ready");
+        if (autoLoop) startListening();
+      });
+    }
+
+    function startListening() {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        setStatus("Mic unsupported");
+        return;
+      }
+      if (recognition) {
+        try { recognition.stop(); } catch (e) {}
+      }
+      recognition = new SR();
+      recognition.lang = "en-IN";
+      recognition.interimResults = false;
+      recognition.onstart = () => setStatus("Listening...");
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        document.getElementById("userInput").value = transcript;
+        askShasa(transcript);
+      };
+      recognition.onerror = () => {
+        setStatus(autoLoop ? "Retry Mic" : "Ready");
+      };
+      recognition.onend = () => {
+        if (!document.getElementById("userInput").value && autoLoop) {
+          setStatus("Paused");
+        }
+      };
+      recognition.start();
+    }
+
+    document.querySelectorAll(".tabs button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
+        btn.classList.add("active");
+        document.getElementById(btn.dataset.tab).classList.add("active");
+      });
+    });
+
+    document.getElementById("sendBtn").addEventListener("click", () => {
+      const inp = document.getElementById("userInput");
+      const val = inp.value;
+      inp.value = "";
+      askShasa(val);
+    });
+
+    document.getElementById("micBtn").addEventListener("click", startListening);
+
+    document.getElementById("loopBtn").addEventListener("click", (e) => {
+      autoLoop = !autoLoop;
+      e.target.textContent = `🔁 Auto Loop: ${autoLoop ? "ON" : "OFF"}`;
+      if (autoLoop) startListening();
+      else if (recognition) try { recognition.stop(); } catch (err) {}
+    });
+
+    document.getElementById("speakToggleBtn").addEventListener("click", (e) => {
+      speakEnabled = !speakEnabled;
+      e.target.textContent = `🔊 Voice: ${speakEnabled ? "ON" : "OFF"}`;
+      if (!speakEnabled && "speechSynthesis" in window) window.speechSynthesis.cancel();
+    });
+
+    document.getElementById("coachBtn").addEventListener("click", async () => {
+      const ctx = document.getElementById("contextInput").value.trim();
+      const tone = document.getElementById("toneSelect").value;
+      if (!ctx) return;
+      const out = document.getElementById("coachOutput");
+      if (state.apiKey) {
+        out.textContent = "Analyzing mood and drafting options...";
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(state.apiKey)}`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `${SHASA_PROMPT}\n\nAnalyze this chat/situation and give 2-3 reply options in a ${tone} tone plus one brief honest tip:\n${ctx}` }] }]
+            })
+          });
+          const data = await res.json();
+          out.textContent = data?.candidates?.[0]?.content?.parts?.[0]?.text || "Could not generate response.";
+          return;
+        } catch (e) {}
+      }
+      out.textContent = `Tone: ${tone}\n1. Calm & clear: "I hear where you're coming from. Let's look at the practical facts first so both of us are on the same page."\n2. Warm & honest: "I care about how this goes, so I want to be upfront without making things tense."\nTip: Pause before sending and check whether your goal is clarity, comfort, or a firm boundary.`;
+    });
+
+    document.getElementById("saveStateBtn").addEventListener("click", () => {
+      persistState();
+      setStatus("Saved");
+    });
+
+    document.getElementById("exportBtn").addEventListener("click", () => {
+      persistState();
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "shasa-backup.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById("importBtn").addEventListener("click", () => {
+      document.getElementById("importFile").click();
+    });
+
+    document.getElementById("importFile").addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          state = { ...state, ...JSON.parse(reader.result) };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          loadState();
+          setStatus("Restored");
+        } catch (err) {
+          setStatus("Invalid JSON");
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById("copyPromptBtn").addEventListener("click", () => {
+      navigator.clipboard?.writeText(SHASA_PROMPT);
+      setStatus("Prompt Copied");
+    });
+
+    loadState();
+  </script>
+</body>
+</html>
